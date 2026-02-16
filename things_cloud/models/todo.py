@@ -70,17 +70,47 @@ class UpdateType(IntEnum):
 class EntityType(StrEnum):
     TASK_6 = "Task6"
     CHECKLIST_ITEM_3 = "ChecklistItem3"
+    TAG_3 = "Tag3"
+    AREA_2 = "Area2"
 
 
 class NewBody(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(populate_by_name=True)
 
     type: Annotated[Literal[UpdateType.NEW], pydantic.Field(alias="t")] = UpdateType.NEW
-    payload: Annotated[TodoApiObject, pydantic.Field(alias="p")]
-    entity: Annotated[EntityType, pydantic.Field(alias="e")] = EntityType.TASK_6
+    payload: Annotated[TodoApiObject | dict[str, Any], pydantic.Field(alias="p")]
+    entity: Annotated[EntityType | str, pydantic.Field(alias="e")] = EntityType.TASK_6
+
+    @pydantic.model_validator(mode="before")
+    @classmethod
+    def _select_payload_type(cls, data: Any) -> Any:
+        """Route payload parsing based on entity type."""
+        if isinstance(data, dict):
+            entity = data.get("e") or data.get("entity")
+            key = "p" if "p" in data else "payload"
+            payload = data.get(key)
+            if entity in (EntityType.TASK_6, "Task6", None):
+                # Ensure Task6 payloads are parsed as TodoApiObject
+                if isinstance(payload, dict):
+                    data[key] = TodoApiObject.model_validate(payload)
+            else:
+                # Keep non-Task6 payloads as raw dict
+                if isinstance(payload, pydantic.BaseModel):
+                    data[key] = payload.model_dump(by_alias=True)
+        return data
 
     def to_api_payload(self) -> dict[str, Any]:
-        return self.model_dump(mode="json", by_alias=True)
+        if isinstance(self.payload, pydantic.BaseModel):
+            payload_dump = self.payload.model_dump(mode="json", by_alias=True)
+        elif isinstance(self.payload, dict):
+            payload_dump = self.payload
+        else:
+            payload_dump = self.payload
+        return {
+            "t": self.type,
+            "p": payload_dump,
+            "e": str(self.entity),
+        }
 
 
 class EditBody(pydantic.BaseModel):

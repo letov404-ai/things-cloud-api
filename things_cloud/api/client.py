@@ -5,9 +5,11 @@ from structlog import get_logger
 from things_cloud.api.account import Account
 from things_cloud.api.const import API_BASE, HEADERS
 from things_cloud.api.exceptions import ThingsCloudException
+from things_cloud.models.tag import TagApiObject, TagItem
 from things_cloud.models.todo import (
     CommitResponse,
     Destination,
+    EntityType,
     HistoryResponse,
     NewBody,
     Status,
@@ -24,7 +26,8 @@ log = get_logger()
 class ThingsClient:
     def __init__(self, account: Account) -> None:
         self._account = account
-        self._items: dict[str, TodoItem] = {}  # TODO: create DB
+        self._items: dict[str, TodoItem] = {}
+        self._tags: dict[str, TagItem] = {}
         self._base_url: str = f"{API_BASE}/history/{account._info.history_key}"
         self._client = httpx.Client(
             base_url=self._base_url,
@@ -104,9 +107,19 @@ class ThingsClient:
                     assert isinstance(
                         update.body, NewBody
                     )  # HACK: type narrowing does not work
-                    item = update.body.payload.to_todo()
-                    item._uuid = update.id
-                    self._items[item.uuid] = item
+                    entity = str(update.body.entity)
+                    if entity == EntityType.TAG_3:
+                        payload = update.body.payload
+                        if isinstance(payload, dict):
+                            api_obj = TagApiObject.model_validate(payload)
+                        else:
+                            api_obj = payload
+                        tag = TagItem.from_api(update.id, api_obj)
+                        self._tags[tag.uuid] = tag
+                    else:
+                        item = update.body.payload.to_todo()
+                        item._uuid = update.id
+                        self._items[item.uuid] = item
                 case UpdateType.EDIT:
                     try:
                         item = self._items[update.id]
@@ -185,6 +198,10 @@ class ThingsClient:
             item for item in self._items.values()
             if not item.trashed and item.type == Type.TASK
         ]
+
+    def tags(self) -> list[TagItem]:
+        """All tags."""
+        return list(self._tags.values())
 
     def __commit(self, update: Update) -> CommitResponse:
         response = self.__request(
