@@ -5,6 +5,7 @@ from structlog import get_logger
 from things_cloud.api.account import Account
 from things_cloud.api.const import API_BASE, HEADERS
 from things_cloud.api.exceptions import ThingsCloudException
+from things_cloud.models.area import AreaApiObject, AreaItem
 from things_cloud.models.tag import TagApiObject, TagItem
 from things_cloud.models.todo import (
     CommitResponse,
@@ -28,6 +29,7 @@ class ThingsClient:
         self._account = account
         self._items: dict[str, TodoItem] = {}
         self._tags: dict[str, TagItem] = {}
+        self._areas_store: dict[str, AreaItem] = {}
         self._base_url: str = f"{API_BASE}/history/{account._info.history_key}"
         self._client = httpx.Client(
             base_url=self._base_url,
@@ -116,6 +118,14 @@ class ThingsClient:
                             api_obj = payload
                         tag = TagItem.from_api(update.id, api_obj)
                         self._tags[tag.uuid] = tag
+                    elif entity == EntityType.AREA_2:
+                        payload = update.body.payload
+                        if isinstance(payload, dict):
+                            api_obj = AreaApiObject.model_validate(payload)
+                        else:
+                            api_obj = payload
+                        area = AreaItem.from_api(update.id, api_obj)
+                        self._areas_store[area.uuid] = area
                     else:
                         item = update.body.payload.to_todo()
                         item._uuid = update.id
@@ -202,6 +212,10 @@ class ThingsClient:
     def tags(self) -> list[TagItem]:
         """All tags."""
         return list(self._tags.values())
+
+    def areas(self) -> list[AreaItem]:
+        """All areas."""
+        return list(self._areas_store.values())
 
     def __commit(self, update: Update) -> CommitResponse:
         response = self.__request(
