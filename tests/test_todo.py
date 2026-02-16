@@ -290,6 +290,35 @@ def test_evening(task: TodoItem):
     # }
 
 
+def test_someday(task: TodoItem):
+    assert task.destination is Destination.INBOX
+    task.someday()
+    assert task.destination is Destination.SOMEDAY
+
+
+def test_someday_from_today(task: TodoItem):
+    task.today()
+    assert task.destination is Destination.ANYTIME
+    task.someday()
+    assert task.destination is Destination.SOMEDAY
+
+
+def test_note_set(task: TodoItem):
+    task.note = Note(v="Some note text")
+    assert task.note.value == "Some note text"
+
+
+def test_reminder_set(task: TodoItem):
+    task.reminder = time(9, 30)
+    assert task.reminder == time(9, 30)
+
+
+def test_reminder_clear(task: TodoItem):
+    task.reminder = time(14, 0)
+    task.reminder = None
+    assert task.reminder is None
+
+
 def test_serde():
     api_object = {
         "ix": 1234,

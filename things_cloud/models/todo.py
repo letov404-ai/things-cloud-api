@@ -581,3 +581,7 @@ class TodoItem(pydantic.BaseModel):
         today = Util.today()
         self.destination = Destination.ANYTIME
         self.scheduled_date = today
+
+    def someday(self) -> None:
+        """Move task to Someday."""
+        self.destination = Destination.SOMEDAY
