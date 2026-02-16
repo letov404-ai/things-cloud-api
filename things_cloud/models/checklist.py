@@ -11,14 +11,14 @@ from things_cloud.utils import Util
 
 
 class ChecklistApiObject(pydantic.BaseModel):
-    model_config = pydantic.ConfigDict(populate_by_name=True)
+    model_config = pydantic.ConfigDict(populate_by_name=True, extra="ignore")
 
     title: Annotated[str, pydantic.Field(alias="tt")]
     status: Annotated[int, pydantic.Field(alias="ss")] = 0  # 0=todo, 3=complete
     index: Annotated[int, pydantic.Field(alias="ix")] = 0
     creation_date: Annotated[TimestampFloat, pydantic.Field(alias="cd")]
     modification_date: Annotated[TimestampFloat, pydantic.Field(alias="md")]
-    task_uuid: Annotated[str, pydantic.Field(alias="ts")]  # parent task
+    task_uuids: Annotated[list[str], pydantic.Field(alias="ts")]  # parent task(s)
 
 
 class ChecklistItem(pydantic.BaseModel):
@@ -39,7 +39,7 @@ class ChecklistItem(pydantic.BaseModel):
             index=self.index,
             creation_date=Util.now(),
             modification_date=Util.now(),
-            task_uuid=self.task_uuid,
+            task_uuids=[self.task_uuid],
         )
         body = NewBody(
             payload=api_obj,
@@ -50,9 +50,10 @@ class ChecklistItem(pydantic.BaseModel):
     @classmethod
     def from_api(cls, uuid: ShortUUID, api_obj: ChecklistApiObject) -> ChecklistItem:
         """Create ChecklistItem from API response."""
+        task_uuid = api_obj.task_uuids[0] if api_obj.task_uuids else ""
         item = cls(
             title=api_obj.title,
-            task_uuid=api_obj.task_uuid,
+            task_uuid=task_uuid,
             status=api_obj.status,
             index=api_obj.index,
         )

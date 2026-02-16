@@ -32,7 +32,7 @@ class AccountInfo(pydantic.BaseModel):
     email: pydantic.EmailStr
     history_key: pydantic.UUID4 = pydantic.Field(alias="history-key")
     issues: list
-    maildrop_email: pydantic.EmailStr = pydantic.Field(alias="maildrop-email")
+    maildrop_email: pydantic.EmailStr | None = pydantic.Field(default=None, alias="maildrop-email")
     status: AccountStatus
 
 

@@ -23,55 +23,19 @@ class CommitResponse(pydantic.BaseModel):
     ]
 
 
-class HistoryResponse(pydantic.BaseModel):
-    current_item_index: Annotated[
-        pydantic.PositiveInt, pydantic.Field(alias="current-item-index")
-    ]
-    end_total_content_size: Annotated[
-        pydantic.PositiveInt, pydantic.Field(alias="end-total-content-size")
-    ]
-    latest_total_content_size: Annotated[
-        pydantic.PositiveInt, pydantic.Field(alias="latest-total-content-size")
-    ]
-    schema_: Annotated[pydantic.PositiveInt, pydantic.Field(alias="schema")]  # 301
-    start_total_content_size: Annotated[
-        pydantic.PositiveInt, pydantic.Field(alias="start-total-content-size")
-    ]
-    items: Annotated[list[dict[str, Body]], pydantic.Field(min_length=1)]
-
-    @property
-    def updates(self) -> Iterator[Update]:
-        for item in self.items:
-            assert (
-                isinstance(item, dict) and len(item) == 1
-            ), "Expected items dict with one key-value pair"
-            key, value = next(iter(item.items()))
-            yield Update(id=key, body=value)
-
-
-class Update(pydantic.BaseModel):
-    id: ShortUUID
-    body: Body = pydantic.Field(discriminator="type")
-
-    # @pydantic.model_validator(mode="after")
-    # def inject_task_id(self) -> Self:
-    #     self.body.payload._uuid = self.id
-    #     return self
-
-    def to_api_payload(self) -> dict[ShortUUID, dict[str, Any]]:
-        return {self.id: self.body.to_api_payload()}
-
-
 class UpdateType(IntEnum):
     NEW = 0
     EDIT = 1
+    DELETE = 2
 
 
 class EntityType(StrEnum):
     TASK_6 = "Task6"
     CHECKLIST_ITEM_3 = "ChecklistItem3"
     TAG_3 = "Tag3"
+    TAG_4 = "Tag4"
     AREA_2 = "Area2"
+    AREA_3 = "Area3"
 
 
 class NewBody(pydantic.BaseModel):
@@ -119,14 +83,78 @@ class EditBody(pydantic.BaseModel):
     type: Annotated[Literal[UpdateType.EDIT], pydantic.Field(alias="t")] = (
         UpdateType.EDIT
     )
-    payload: Annotated[TodoDeltaApiObject, pydantic.Field(alias="p")]
-    entity: Annotated[EntityType, pydantic.Field(alias="e")] = EntityType.TASK_6
+    payload: Annotated[TodoDeltaApiObject | dict[str, Any], pydantic.Field(alias="p")]
+    entity: Annotated[EntityType | str, pydantic.Field(alias="e")] = EntityType.TASK_6
+
+    @pydantic.model_validator(mode="before")
+    @classmethod
+    def _select_payload_type(cls, data: Any) -> Any:
+        """Route payload parsing based on entity type."""
+        if isinstance(data, dict):
+            entity = data.get("e") or data.get("entity")
+            key = "p" if "p" in data else "payload"
+            payload = data.get(key)
+            if entity in (EntityType.TASK_6, "Task6", None):
+                if isinstance(payload, dict):
+                    data[key] = TodoDeltaApiObject.model_validate(payload)
+            # Non-Task6 payloads stay as raw dict
+        return data
 
     def to_api_payload(self) -> dict[str, Any]:
-        return self.model_dump(mode="json", by_alias=True, exclude_none=True)
+        if isinstance(self.payload, pydantic.BaseModel):
+            return self.model_dump(mode="json", by_alias=True, exclude_none=True)
+        return {
+            "t": self.type,
+            "p": self.payload,
+            "e": str(self.entity),
+        }
 
 
-Body = Annotated[NewBody | EditBody, pydantic.Field(discriminator="type")]
+class DeleteBody(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(populate_by_name=True)
+
+    type: Annotated[Literal[UpdateType.DELETE], pydantic.Field(alias="t")] = UpdateType.DELETE
+    payload: Annotated[dict[str, Any], pydantic.Field(alias="p")] = {}
+    entity: Annotated[str, pydantic.Field(alias="e")] = ""
+
+    def to_api_payload(self) -> dict[str, Any]:
+        return self.model_dump(mode="json", by_alias=True)
+
+
+Body = Annotated[NewBody | EditBody | DeleteBody, pydantic.Field(discriminator="type")]
+
+
+class HistoryResponse(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(populate_by_name=True)
+
+    current_item_index: Annotated[
+        int, pydantic.Field(alias="current-item-index", ge=0)
+    ]
+    end_total_content_size: Annotated[
+        int, pydantic.Field(alias="end-total-content-size", ge=0)
+    ]
+    latest_total_content_size: Annotated[
+        int, pydantic.Field(alias="latest-total-content-size", ge=0)
+    ]
+    schema_: Annotated[int, pydantic.Field(alias="schema", ge=0)]  # 301
+    start_total_content_size: Annotated[
+        int, pydantic.Field(alias="start-total-content-size", ge=0)
+    ]
+    items: Annotated[list[dict[str, Body]], pydantic.Field(min_length=1)]
+
+    @property
+    def updates(self) -> Iterator[Update]:
+        for item in self.items:
+            for key, value in item.items():
+                yield Update(id=key, body=value)
+
+
+class Update(pydantic.BaseModel):
+    id: ShortUUID
+    body: Body = pydantic.Field(discriminator="type")
+
+    def to_api_payload(self) -> dict[ShortUUID, dict[str, Any]]:
+        return {self.id: self.body.to_api_payload()}
 
 
 class Type(IntEnum):
@@ -167,8 +195,8 @@ class TodoApiObject(pydantic.BaseModel):
     title: Annotated[str, pydantic.Field(alias="tt")]
     status: Annotated[Status, pydantic.Field(alias="ss")]
     destination: Annotated[Destination, pydantic.Field(alias="st")]
-    creation_date: Annotated[TimestampFloat, pydantic.Field(alias="cd")]
-    modification_date: Annotated[TimestampFloat, pydantic.Field(alias="md")]
+    creation_date: Annotated[TimestampFloat | None, pydantic.Field(alias="cd")]
+    modification_date: Annotated[TimestampFloat | None, pydantic.Field(alias="md")]
     scheduled_date: Annotated[TimestampInt | None, pydantic.Field(alias="sr")]
     today_index_reference_date: Annotated[
         TimestampInt | None, pydantic.Field(alias="tir")
@@ -208,7 +236,7 @@ class TodoApiObject(pydantic.BaseModel):
     after_completion_reference_date: Annotated[
         TimestampInt | None, pydantic.Field(alias="acrd")
     ]
-    recurrence_rule: Annotated[str | None, pydantic.Field(alias="rr")]
+    recurrence_rule: Annotated[Any, pydantic.Field(alias="rr")]  # str, dict, or None
     note: Annotated[Note, pydantic.Field(alias="nt")]
     xx: Annotated[XX, pydantic.Field(alias="xx")]
     # task: Annotated[
@@ -222,8 +250,8 @@ class TodoApiObject(pydantic.BaseModel):
         todo = TodoItem(
             index=self.index,
             title=self.title,
-            creation_date=self.creation_date,
-            modification_date=self.modification_date,
+            creation_date=self.creation_date or Util.now(),
+            modification_date=self.modification_date or Util.now(),
             scheduled_date=self.scheduled_date,
             today_index_reference_date=self.today_index_reference_date,
             completion_date=self.completion_date,
@@ -266,7 +294,7 @@ class TodoDeltaApiObject(pydantic.BaseModel):
     status: Annotated[Status | None, pydantic.Field(alias="ss")] = None
     destination: Annotated[Destination | None, pydantic.Field(alias="st")] = None
     creation_date: Annotated[TimestampFloat | None, pydantic.Field(alias="cd")] = None
-    modification_date: Annotated[TimestampFloat, pydantic.Field(alias="md")] = (
+    modification_date: Annotated[TimestampFloat | None, pydantic.Field(alias="md")] = (
         pydantic.Field(default_factory=Util.now)
     )
     scheduled_date: Annotated[TimestampInt | None, pydantic.Field(alias="sr")] = None
@@ -304,7 +332,7 @@ class TodoDeltaApiObject(pydantic.BaseModel):
     after_completion_reference_date: Annotated[
         TimestampInt | None, pydantic.Field(alias="acrd")
     ] = None
-    recurrence_rule: Annotated[str | None, pydantic.Field(alias="rr")] = None
+    recurrence_rule: Annotated[Any, pydantic.Field(alias="rr")] = None  # str, dict, or None
     note: Annotated[Note | None, pydantic.Field(alias="nt")] = None
     xx: Annotated[XX | None, pydantic.Field(alias="xx")] = None
 
@@ -358,7 +386,7 @@ class TodoItem(pydantic.BaseModel):
     instance_creation_start_date: datetime | None = pydantic.Field(default=None)
     repeater: Any = pydantic.Field(default=None)  # TODO: date type yet to be seen
     after_completion_reference_date: datetime | None = pydantic.Field(default=None)
-    recurrence_rule: str | None = pydantic.Field(default=None)  # TODO: weird XML values
+    recurrence_rule: Any = pydantic.Field(default=None)  # str, dict, or None
     note: Note = pydantic.Field(default_factory=Note)
     xx: XX = pydantic.Field(default_factory=XX)
     _synced_state: TodoApiObject | None = pydantic.PrivateAttr(default=None)

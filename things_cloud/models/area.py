@@ -11,7 +11,7 @@ from things_cloud.utils import Util
 
 
 class AreaApiObject(pydantic.BaseModel):
-    model_config = pydantic.ConfigDict(populate_by_name=True)
+    model_config = pydantic.ConfigDict(populate_by_name=True, extra="ignore")
 
     title: Annotated[str, pydantic.Field(alias="tt")]
     index: Annotated[int, pydantic.Field(alias="ix")] = 0

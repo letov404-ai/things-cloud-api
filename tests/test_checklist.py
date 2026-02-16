@@ -50,7 +50,7 @@ def test_checklist_to_update():
     assert body["e"] == "ChecklistItem3"
     assert body["t"] == 0  # NEW
     assert body["p"]["tt"] == "Buy milk"
-    assert body["p"]["ts"] == PARENT_TASK_UUID
+    assert body["p"]["ts"] == [PARENT_TASK_UUID]
 
 
 # --- ThingsClient checklist storage ---
@@ -106,7 +106,7 @@ def test_process_history_checklist_new(things: ThingsClient):
                         "ix": 0,
                         "cd": 1733747506.0,
                         "md": 1733747506.0,
-                        "ts": PARENT_TASK_UUID,
+                        "ts": [PARENT_TASK_UUID],
                     },
                     "e": "ChecklistItem3",
                     "t": 0,

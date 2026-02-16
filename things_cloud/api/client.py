@@ -10,11 +10,13 @@ from things_cloud.models.checklist import ChecklistApiObject, ChecklistItem
 from things_cloud.models.tag import TagApiObject, TagItem
 from things_cloud.models.todo import (
     CommitResponse,
+    DeleteBody,
     Destination,
     EntityType,
     HistoryResponse,
     NewBody,
     Status,
+    TodoDeltaApiObject,
     TodoItem,
     Type,
     Update,
@@ -41,8 +43,13 @@ class ThingsClient:
                 "response": [self.log_response, self.raise_on_4xx_5xx],
             },
         )
-        self._session = account.new_session()
-        self._offset = self._session.head_index
+        try:
+            self._session = account.new_session()
+            self._offset = self._session.head_index
+        except (RuntimeError, ThingsCloudException):
+            log.warning("Session creation failed, starting from offset 0")
+            self._session = None
+            self._offset = 0
 
     def __del__(self):
         self._client.close()
@@ -112,7 +119,7 @@ class ThingsClient:
                         update.body, NewBody
                     )  # HACK: type narrowing does not work
                     entity = str(update.body.entity)
-                    if entity == EntityType.TAG_3:
+                    if entity in (EntityType.TAG_3, EntityType.TAG_4):
                         payload = update.body.payload
                         if isinstance(payload, dict):
                             api_obj = TagApiObject.model_validate(payload)
@@ -120,7 +127,7 @@ class ThingsClient:
                             api_obj = payload
                         tag = TagItem.from_api(update.id, api_obj)
                         self._tags[tag.uuid] = tag
-                    elif entity == EntityType.AREA_2:
+                    elif entity in (EntityType.AREA_2, EntityType.AREA_3):
                         payload = update.body.payload
                         if isinstance(payload, dict):
                             api_obj = AreaApiObject.model_validate(payload)
@@ -136,17 +143,28 @@ class ThingsClient:
                             api_obj = payload
                         cl_item = ChecklistItem.from_api(update.id, api_obj)
                         self._checklist_items[cl_item.uuid] = cl_item
-                    else:
+                    elif entity == EntityType.TASK_6:
                         item = update.body.payload.to_todo()
                         item._uuid = update.id
                         self._items[item.uuid] = item
+                    else:
+                        log.debug("skipping unknown entity", entity=entity)
                 case UpdateType.EDIT:
-                    try:
-                        item = self._items[update.id]
-                    except KeyError as key_err:
-                        msg = f"todo {id} not found"
-                        raise ValueError(msg) from key_err
-                    update.body.payload.apply_edits(item)
+                    if update.id in self._items and isinstance(
+                        update.body.payload, TodoDeltaApiObject
+                    ):
+                        try:
+                            item = self._items[update.id]
+                            update.body.payload.apply_edits(item)
+                        except (ValueError, AttributeError) as e:
+                            log.debug("skipping edit", id=update.id, error=str(e))
+                    else:
+                        log.debug("skipping edit for unknown item", id=update.id)
+                case UpdateType.DELETE:
+                    self._items.pop(update.id, None)
+                    self._tags.pop(update.id, None)
+                    self._areas_store.pop(update.id, None)
+                    self._checklist_items.pop(update.id, None)
 
     def _active_tasks(self) -> list[TodoItem]:
         """All non-trashed, non-completed tasks of type TASK."""

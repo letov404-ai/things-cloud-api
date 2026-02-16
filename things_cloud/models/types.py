@@ -3,10 +3,12 @@ from typing import Annotated
 
 import pydantic
 
-ShortUUID = Annotated[str, pydantic.StringConstraints(min_length=22, max_length=22)]
+ShortUUID = Annotated[str, pydantic.StringConstraints(min_length=20, max_length=24)]
 
 
-def from_timestamp(timestamp: datetime | int | float) -> datetime:
+def from_timestamp(timestamp: datetime | int | float | None) -> datetime | None:
+    if timestamp is None:
+        return None
     if isinstance(timestamp, datetime):
         return timestamp
     return datetime.fromtimestamp(timestamp, UTC)
