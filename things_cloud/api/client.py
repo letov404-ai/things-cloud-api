@@ -7,9 +7,12 @@ from things_cloud.api.const import API_BASE, HEADERS
 from things_cloud.api.exceptions import ThingsCloudException
 from things_cloud.models.todo import (
     CommitResponse,
+    Destination,
     HistoryResponse,
     NewBody,
+    Status,
     TodoItem,
+    Type,
     Update,
     UpdateType,
 )
@@ -112,12 +115,75 @@ class ThingsClient:
                         raise ValueError(msg) from key_err
                     update.body.payload.apply_edits(item)
 
-    # HACK: temporary
-    def today(self) -> list[TodoItem]:
+    def _active_tasks(self) -> list[TodoItem]:
+        """All non-trashed, non-completed tasks of type TASK."""
         return [
-            item
-            for _, item in self._items.items()
-            if item.scheduled_date == Util.today()
+            item for item in self._items.values()
+            if not item.trashed and item.status == Status.TODO and item.type == Type.TASK
+        ]
+
+    def inbox(self) -> list[TodoItem]:
+        """Tasks in Inbox (not trashed, not completed)."""
+        return [
+            item for item in self._active_tasks()
+            if item.destination == Destination.INBOX
+        ]
+
+    def today(self) -> list[TodoItem]:
+        """Tasks scheduled for today."""
+        return [
+            item for item in self._active_tasks()
+            if item.is_today
+        ]
+
+    def anytime(self) -> list[TodoItem]:
+        """Tasks with destination=ANYTIME, excluding today's scheduled."""
+        return [
+            item for item in self._active_tasks()
+            if item.destination == Destination.ANYTIME and not item.is_today
+        ]
+
+    def someday(self) -> list[TodoItem]:
+        """Tasks with destination=SOMEDAY."""
+        return [
+            item for item in self._active_tasks()
+            if item.destination == Destination.SOMEDAY
+        ]
+
+    def projects(self) -> list[TodoItem]:
+        """All non-trashed project items."""
+        return [
+            item for item in self._items.values()
+            if not item.trashed and item.type == Type.PROJECT
+        ]
+
+    def by_project(self, project_uuid: str) -> list[TodoItem]:
+        """Tasks belonging to a specific project."""
+        return [
+            item for item in self._active_tasks()
+            if item.project == project_uuid
+        ]
+
+    def completed(self) -> list[TodoItem]:
+        """All completed items (not trashed)."""
+        return [
+            item for item in self._items.values()
+            if item.status == Status.COMPLETE and not item.trashed
+        ]
+
+    def trashed(self) -> list[TodoItem]:
+        """All trashed items."""
+        return [item for item in self._items.values() if item.trashed]
+
+    def get(self, uuid: str) -> TodoItem | None:
+        """Get a specific item by UUID."""
+        return self._items.get(uuid)
+
+    def all_tasks(self) -> list[TodoItem]:
+        """All non-trashed tasks (any status)."""
+        return [
+            item for item in self._items.values()
+            if not item.trashed and item.type == Type.TASK
         ]
 
     def __commit(self, update: Update) -> CommitResponse:
