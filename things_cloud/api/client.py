@@ -6,6 +6,7 @@ from things_cloud.api.account import Account
 from things_cloud.api.const import API_BASE, HEADERS
 from things_cloud.api.exceptions import ThingsCloudException
 from things_cloud.models.area import AreaApiObject, AreaItem
+from things_cloud.models.checklist import ChecklistApiObject, ChecklistItem
 from things_cloud.models.tag import TagApiObject, TagItem
 from things_cloud.models.todo import (
     CommitResponse,
@@ -30,6 +31,7 @@ class ThingsClient:
         self._items: dict[str, TodoItem] = {}
         self._tags: dict[str, TagItem] = {}
         self._areas_store: dict[str, AreaItem] = {}
+        self._checklist_items: dict[str, ChecklistItem] = {}
         self._base_url: str = f"{API_BASE}/history/{account._info.history_key}"
         self._client = httpx.Client(
             base_url=self._base_url,
@@ -126,6 +128,14 @@ class ThingsClient:
                             api_obj = payload
                         area = AreaItem.from_api(update.id, api_obj)
                         self._areas_store[area.uuid] = area
+                    elif entity == EntityType.CHECKLIST_ITEM_3:
+                        payload = update.body.payload
+                        if isinstance(payload, dict):
+                            api_obj = ChecklistApiObject.model_validate(payload)
+                        else:
+                            api_obj = payload
+                        cl_item = ChecklistItem.from_api(update.id, api_obj)
+                        self._checklist_items[cl_item.uuid] = cl_item
                     else:
                         item = update.body.payload.to_todo()
                         item._uuid = update.id
@@ -216,6 +226,13 @@ class ThingsClient:
     def areas(self) -> list[AreaItem]:
         """All areas."""
         return list(self._areas_store.values())
+
+    def checklists_for(self, task_uuid: str) -> list[ChecklistItem]:
+        """Checklist items for a specific task, sorted by index."""
+        return sorted(
+            [item for item in self._checklist_items.values() if item.task_uuid == task_uuid],
+            key=lambda x: x.index,
+        )
 
     def __commit(self, update: Update) -> CommitResponse:
         response = self.__request(
