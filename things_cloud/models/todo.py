@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta, timezone
 from enum import IntEnum, StrEnum
 from typing import Annotated, Any, Literal
 
@@ -595,13 +595,17 @@ class TodoItem(pydantic.BaseModel):
         """Match Things 3 Today view logic.
 
         A task appears in Today if it is in Anytime AND has a start date set
-        AND is not a recurring template.
+        AND is not a recurring template AND the start date is within the
+        last 30 days (to work around cloud event replay inaccuracies).
         """
         if self.destination is not Destination.ANYTIME:
             return False
         if bool(self.recurrence_rule):
             return False
-        return self.scheduled_date is not None
+        if self.scheduled_date is None:
+            return False
+        cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+        return self.scheduled_date >= cutoff
 
     @property
     def is_evening(self) -> bool:
