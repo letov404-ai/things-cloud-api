@@ -29,6 +29,10 @@ dev = [
   "freezegun>=1.5.1",
 ]
 
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [tool.ruff]
 output-format = "grouped"
 show-fixes = true
