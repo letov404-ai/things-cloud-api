@@ -140,7 +140,7 @@ class HistoryResponse(pydantic.BaseModel):
     start_total_content_size: Annotated[
         int, pydantic.Field(alias="start-total-content-size", ge=0)
     ]
-    items: Annotated[list[dict[str, Body]], pydantic.Field(min_length=1)]
+    items: Annotated[list[dict[str, Body]], pydantic.Field(min_length=0)]
 
     @property
     def updates(self) -> Iterator[Update]:
