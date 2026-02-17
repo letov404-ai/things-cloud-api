@@ -12,7 +12,11 @@ dependencies = [
   "pydantic[email]>=2.10.3",
   "shortuuid>=1.0.13",
   "httpx>=0.28.1",
+  "fastmcp>=2.0",
 ]
+
+[project.scripts]
+things-cloud-mcp = "things_cloud.mcp_server:main"
 
 [dependency-groups]
 dev = [
