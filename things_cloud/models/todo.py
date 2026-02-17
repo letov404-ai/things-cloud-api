@@ -592,10 +592,20 @@ class TodoItem(pydantic.BaseModel):
 
     @property
     def is_today(self) -> bool:
-        return (
-            self.destination is Destination.ANYTIME
-            and self.scheduled_date == Util.today()
-        )
+        if self.destination is not Destination.ANYTIME:
+            return False
+        today = Util.today()
+        # Normalize: strip timezone for comparison (dates are date-level, not time-level)
+        today_date = today.date() if hasattr(today, 'date') else today
+        # Task is in Today if it has a scheduled_date <= today
+        if self.scheduled_date is not None:
+            sd = self.scheduled_date.date() if hasattr(self.scheduled_date, 'date') else self.scheduled_date
+            if sd <= today_date:
+                return True
+        # Or if it has a today_index_reference_date (was moved to Today)
+        if self.today_index_reference_date is not None:
+            return True
+        return False
 
     @property
     def is_evening(self) -> bool:
