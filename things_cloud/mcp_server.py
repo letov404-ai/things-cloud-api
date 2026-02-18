@@ -319,8 +319,7 @@ def get_upcoming() -> str:
     tasks = [
         t
         for t in client._active_tasks()
-        if t.destination == Destination.ANYTIME
-        and t.scheduled_date is not None
+        if t.scheduled_date is not None
         and t.scheduled_date.date() > now
         and not bool(t.recurrence_rule)
     ]
@@ -1062,3 +1061,7 @@ def add_checklist_item(
 
 def main():
     mcp.run()
+
+
+if __name__ == "__main__":
+    main()
